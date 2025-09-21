@@ -102,11 +102,11 @@ export class SyncController {
 			case 'remove': {
 				// Always do remote first
 				if (action.remoteFile) {
-					await this.remote.remove(action.remoteFile.path, action.remoteFile.updatedAt);
+					await this.remote.remove(action.remoteFile.path, action.remoteFile.updatedAt, now);
 				}
 
 				if (action.hostFile) {
-					await this.host.remove(action.hostFile.path, action.hostFile.updatedAt);
+					await this.host.remove(action.hostFile.path, action.hostFile.updatedAt, now);
 				}
 
 				break;

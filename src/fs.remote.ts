@@ -40,8 +40,8 @@ export class RemoteFileSystem extends FileSystem {
 		await this.repo.updateFile({ filePath: path, fileName: path, previousUpdatedAt, file: content, isDeleted: false, newUpdatedAt });
 	}
 
-	async remove(path: string, previousUpdatedAt: number): Promise<void> {
-		await this.repo.updateFile({ filePath: path, fileName: path, previousUpdatedAt, isDeleted: true });
+	async remove(path: string, previousUpdatedAt: number, newUpdatedAt: number): Promise<void> {
+		await this.repo.updateFile({ filePath: path, fileName: path, previousUpdatedAt, isDeleted: true, newUpdatedAt });
 	}
 
 	prune(): Promise<void> {
