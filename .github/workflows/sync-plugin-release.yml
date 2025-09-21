@@ -1,0 +1,111 @@
+name: Release Plugin
+
+on:
+    push:
+        tags:
+            - 'plugin-v*'
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: 'Tag to create release for'
+                required: true
+                type: string
+
+jobs:
+    build-and-release:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '18'
+                  cache: 'npm'
+                  cache-dependency-path: package.json
+
+            - name: Extract version from tag
+              id: extract_version
+              run: |
+                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+                    TAG="${{ github.event.inputs.tag }}"
+                  else
+                    TAG="${{ github.ref_name }}"
+                  fi
+                  VERSION=${TAG#plugin-v}
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "Extracted version: $VERSION from tag: $TAG"
+
+            - name: Update manifest.json version
+              working-directory: .
+              run: |
+                  VERSION="${{ steps.extract_version.outputs.version }}"
+                  node -e "
+                    const fs = require('fs');
+                    const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+                    manifest.version = '$VERSION';
+                    fs.writeFileSync('manifest.json', JSON.stringify(manifest, null, 2));
+                    console.log('Updated manifest.json version to:', '$VERSION');
+                  "
+
+            - name: Install dependencies
+              run: npm install
+
+            - name: Build plugin
+              run: npm run build
+
+            - name: Create release directory
+              run: mkdir -p release
+
+            - name: Copy release files
+              working-directory: packages/paintress-sync-plugin
+              run: |
+                  cp main.js ../../release/
+                  cp manifest.json ../../release/
+                  # Copy styles.css if it exists
+                  if [ -f "styles.css" ]; then
+                    cp styles.css ../../release/
+                  fi
+
+            - name: Create release zip
+              run: |
+                  cd release
+                  zip -r paintress-obsidian-sync-plugin.zip .
+                  cd ..
+
+            - name: Get version for release
+              id: version
+              run: |
+                  VERSION="${{ steps.extract_version.outputs.version }}"
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "Plugin version: $VERSION"
+
+            - name: Create Release
+              id: create_release
+              uses: actions/create-release@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+                  release_name: Paintress Sync Plugin v${{ steps.version.outputs.version }}
+                  body: |
+                      ## Paintress Sync Plugin v${{ steps.version.outputs.version }}
+                      ---
+
+                      **Note**: This plugin requires Obsidian v${{ steps.version.outputs.minAppVersion || '0.15.0' }} or higher.
+                  draft: false
+                  prerelease: false
+
+            - name: Upload Release Asset - ZIP
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: ./release/paintress-obsidian-sync-plugin.zip
+                  asset_name: paintress-obsidian-sync-plugin.zip
+                  asset_content_type: application/zip
