@@ -62,13 +62,12 @@ jobs:
               run: mkdir -p release
 
             - name: Copy release files
-              working-directory: packages/paintress-sync-plugin
               run: |
-                  cp main.js ../../release/
-                  cp manifest.json ../../release/
+                  cp main.js release/
+                  cp manifest.json release/
                   # Copy styles.css if it exists
                   if [ -f "styles.css" ]; then
-                    cp styles.css ../../release/
+                    cp styles.css release/
                   fi
 
             - name: Create release zip
