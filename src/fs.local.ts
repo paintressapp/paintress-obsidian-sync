@@ -33,6 +33,8 @@ export class LocalFileSystem extends FileSystem {
 				...file,
 				deleted: true,
 				size: 0,
+				createdAt: file.deletedAt,
+				updatedAt: file.deletedAt,
 			})),
 		];
 	}

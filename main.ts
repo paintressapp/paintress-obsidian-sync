@@ -58,6 +58,17 @@ export default class PaintressSyncPlugin extends Plugin {
 		this.statusBarItem.style.gap = '0.5rem';
 
 		this.clearStatusBarItem();
+
+		this.fileHistory = new LocalFileHistory(this);
+
+		// Obsidian file move or file deleted event
+		this.app.vault.on('rename', (file, oldPath) => {
+			this.fileHistory?.markFileAsDeleted(oldPath, 0, 0);
+		});
+
+		this.app.vault.on('delete', (file) => {
+			this.fileHistory?.markFileAsDeleted(file.path, 0, 0);
+		});
 	}
 
 	private clearStatusBarItem() {
@@ -94,9 +105,8 @@ export default class PaintressSyncPlugin extends Plugin {
 
 		const repo = new Repo(api_host, api_key);
 		this.connectionMonitor = new ConnectionMonitor(repo);
-		this.fileHistory = new LocalFileHistory(this);
 
-		const localFs = new LocalFileSystem(this, this.settingsController, this.fileHistory);
+		const localFs = new LocalFileSystem(this, this.settingsController, this.fileHistory!);
 		const remoteFs = new RemoteFileSystem(repo, this.settingsController);
 		const crypto = new Crypto(this.settingsController);
 		const conflictResolver = new ConflictResolver();

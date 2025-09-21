@@ -2,8 +2,6 @@ import { Plugin } from 'obsidian';
 
 export type FileHistory = {
 	deletedAt: number;
-	updatedAt: number;
-	createdAt: number;
 };
 
 type FileHistoryData = Record<string, FileHistory>;
@@ -41,18 +39,14 @@ export class LocalFileHistory {
 	async markFileAsDeleted(filePath: string, mtime: number, ctime: number): Promise<void> {
 		this.data[filePath] = {
 			deletedAt: Date.now(),
-			updatedAt: mtime,
-			createdAt: ctime,
 		};
 		await this.saveData();
 	}
 
-	getAllDeletedFiles(): { path: string; deletedAt: number; updatedAt: number; createdAt: number }[] {
+	getAllDeletedFiles(): { path: string; deletedAt: number }[] {
 		return Object.entries(this.data).map(([path, history]) => ({
 			path,
 			deletedAt: history.deletedAt,
-			updatedAt: history.updatedAt,
-			createdAt: history.createdAt,
 		}));
 	}
 
