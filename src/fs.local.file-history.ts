@@ -13,7 +13,7 @@ export class LocalFileHistory {
 	constructor(private plugin: Plugin) {
 		this.filePath = '.obsidian/.paintress/file-history.json';
 
-		this.plugin.app.vault.adapter.mkdir('.paintress');
+		this.plugin.app.vault.adapter.mkdir('.obsidian/.paintress');
 		this.loadData();
 	}
 

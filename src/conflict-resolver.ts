@@ -1,10 +1,23 @@
 import { FileMetadata } from './fs';
 import { reconcile } from 'reconcile-text';
+import { ConflictResolutionStrategy, SettingsController } from './settings-controller';
+import { minimatch } from 'minimatch';
 
 export class ConflictResolver {
-	canResolve(hostFile: FileMetadata, remoteFile: FileMetadata): boolean {
+	constructor(private settings: SettingsController) {}
+
+	getResolutionStrategy(hostFile: FileMetadata, remoteFile: FileMetadata): ConflictResolutionStrategy {
+		const matchedStrategy = this.settings.settings.resolution_strategies
+			.flatMap((obj) => {
+				const globs = obj.glob.split(',').map((glob) => glob.trim());
+				return globs.map((glob) => ({ ...obj, glob }));
+			})
+			.find((strategy) => minimatch(hostFile.path, strategy.glob));
+
+		const defaultStrategy = matchedStrategy?.strategy || this.settings.settings.fallback_conflict_resolution_strategy;
+
 		// assuming both host file and remote file have same path
-		return this.isTextBasedFile(hostFile);
+		return this.isTextBasedFile(hostFile) ? 'resolve' : defaultStrategy;
 	}
 
 	resolve(hostFile: FileMetadata, remoteFile: FileMetadata, hostFileContent: string, remoteFileContent: string) {

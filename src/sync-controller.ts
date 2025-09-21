@@ -2,6 +2,7 @@ import { ConflictResolver } from './conflict-resolver';
 import { FileMetadata, FileSystem } from './fs';
 import { Crypto } from './crypto';
 import { SettingsController } from './settings-controller';
+import { minimatch } from 'minimatch';
 
 interface SyncAction {
 	hostFile: FileMetadata | null;
@@ -23,13 +24,31 @@ export class SyncController {
 	async sync() {
 		this.last_synced_at = this.settings.settings.last_synced_at || 0;
 		const now = Date.now();
+
+		const excludePatterns = this.settings.settings.exclude_globs;
 		// TODO: send last_synced_remote_status to server for query optimization
 		const hostFiles = await this.host.getFiles();
 		const remoteFiles = await this.remote.getFiles();
 
-		const actions = await this.createSyncAction(hostFiles, remoteFiles);
+		const filteredRemoteFiles = remoteFiles.filter((file) => {
+			if (
+				this.isFileExcluded(
+					file.path,
+					excludePatterns
+						.split('\n')
+						.flatMap((pattern) => pattern.trim().split(','))
+						.flatMap((pattern) => pattern.trim()),
+				)
+			) {
+				return false;
+			}
 
-		console.log('[SyncController] Current Status: ', { hostFiles, remoteFiles });
+			return true;
+		});
+
+		const actions = await this.createSyncAction(hostFiles, filteredRemoteFiles);
+
+		console.log('[SyncController] Current Status: ', { hostFiles, remoteFiles: filteredRemoteFiles });
 		console.log('[SyncController] Last Synced At: ', { lastSyncedAt: this.last_synced_at, now });
 		console.log('[SyncController] Created actions: ', actions);
 
@@ -48,7 +67,31 @@ export class SyncController {
 		};
 	}
 
-	private async applySyncAction(action: SyncAction, now: number) {
+	private isFileExcluded(filePath: string, excludePatterns: string[]): boolean {
+		if (!excludePatterns || excludePatterns.length === 0) {
+			return false;
+		}
+
+		// Use minimatch to check if file matches any exclude pattern
+		for (const pattern of excludePatterns) {
+			if (pattern.trim() === '') continue;
+
+			try {
+				// Use minimatch with dot option to handle hidden files
+				if (minimatch(filePath, pattern, { dot: true })) {
+					return true;
+				}
+			} catch (error) {
+				// Invalid pattern, skip it
+				console.warn(`Invalid exclude pattern: ${pattern}`, error);
+				continue;
+			}
+		}
+
+		return false;
+	}
+
+	private async applySyncAction(action: SyncAction, now: number): Promise<void> {
 		switch (action.action) {
 			case 'prune': {
 				if (action.hostFile) {
@@ -70,12 +113,62 @@ export class SyncController {
 			}
 			case 'conflict': {
 				if (action.hostFile && action.remoteFile) {
-					const updatedData = await this.handleConflict(action.hostFile, action.remoteFile);
+					const { resolutionStrategy, updatedData } = await this.handleConflict(action.hostFile, action.remoteFile);
 
-					if (updatedData) {
-						// Always do remote first
-						await this.remote.update(action.remoteFile.path, updatedData, action.remoteFile.updatedAt, now);
-						await this.host.update(action.hostFile.path, updatedData, action.hostFile.updatedAt, now);
+					switch (resolutionStrategy) {
+						case 'resolve': {
+							if (updatedData) {
+								// Always do remote first
+								await this.remote.update(action.remoteFile.path, updatedData, action.remoteFile.updatedAt, now);
+								await this.host.update(action.hostFile.path, updatedData, action.hostFile.updatedAt, now);
+							}
+
+							break;
+						}
+						case 'ignore': {
+							break;
+						}
+						case 'latest': {
+							const updatedAction = action.hostFile.updatedAt < action.remoteFile.updatedAt ? 'pull' : 'push';
+							return this.applySyncAction(
+								{
+									...action,
+									action: updatedAction,
+								},
+								now,
+							);
+						}
+						case 'oldest': {
+							const updatedAction = action.hostFile.updatedAt < action.remoteFile.updatedAt ? 'push' : 'pull';
+							return this.applySyncAction(
+								{
+									...action,
+									action: updatedAction,
+								},
+								now,
+							);
+						}
+						case 'always-pull': {
+							return this.applySyncAction(
+								{
+									...action,
+									action: 'pull',
+								},
+								now,
+							);
+						}
+						case 'always-push': {
+							return this.applySyncAction(
+								{
+									...action,
+									action: 'push',
+								},
+								now,
+							);
+						}
+						default: {
+							throw new Error(`Invalid resolution strategy: ${resolutionStrategy}`);
+						}
 					}
 				}
 				break;
@@ -192,13 +285,21 @@ export class SyncController {
 		const hostFileDataString = await this.crypto.bufferToString(hostFileData);
 		const remoteFileDataString = await this.crypto.bufferToString(remoteFileData);
 
-		if (this.conflictResolver.canResolve(hostFile, remoteFile)) {
+		const resolutionStrategy = this.conflictResolver.getResolutionStrategy(hostFile, remoteFile);
+
+		if (resolutionStrategy === 'resolve') {
 			const resolvedData = this.conflictResolver.resolve(hostFile, remoteFile, hostFileDataString, remoteFileDataString);
 
-			return this.crypto.encrypt(await this.crypto.stringToBuffer(resolvedData));
+			return {
+				resolutionStrategy,
+				updatedData: await this.crypto.encrypt(await this.crypto.stringToBuffer(resolvedData)),
+			};
 		}
 
-		return null;
+		return {
+			resolutionStrategy,
+			updatedData: null,
+		};
 	}
 
 	private getFile(files: FileMetadata[], path: string) {

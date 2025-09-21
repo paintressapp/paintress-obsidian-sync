@@ -13,7 +13,7 @@ export class LocalFileSystem extends FileSystem {
 	db: RootDatabase<any, Key>;
 
 	constructor(
-		plugin: Plugin,
+		private plugin: Plugin,
 		private settings: SettingsController,
 		private history: LocalFileHistory,
 		deleteToWhere: 'obsidian' | 'system' = 'obsidian',
@@ -27,16 +27,23 @@ export class LocalFileSystem extends FileSystem {
 		const arr = await this.walk();
 		const deletedFiles = this.history.getAllDeletedFiles();
 
-		return [
-			...arr,
-			...deletedFiles.map((file) => ({
+		const filteredDeletedFiles = deletedFiles
+			.filter((file) => !arr.some((arrFile) => arrFile.path === file.path))
+			.map((file) => ({
 				...file,
 				deleted: true,
 				size: 0,
 				createdAt: file.deletedAt,
 				updatedAt: file.deletedAt,
-			})),
-		];
+			}));
+
+		if (!this.settings.settings.sync_internal_files) {
+			return [...arr, ...filteredDeletedFiles];
+		}
+
+		const internalFiles = await this.walkInternalFiles('.obsidian');
+
+		return [...arr, ...filteredDeletedFiles, ...internalFiles];
 	}
 
 	async getFileContent(path: string): Promise<ArrayBuffer> {
@@ -90,6 +97,44 @@ export class LocalFileSystem extends FileSystem {
 		}
 	}
 
+	private async walkInternalFiles(folder: string): Promise<FileMetadata[]> {
+		const arr: FileMetadata[] = [];
+		const excludePatterns = this.settings.settings.exclude_globs;
+
+		const files = await this.plugin.app.vault.adapter.list(folder);
+
+		for (const file of files.files) {
+			const entry = await this.plugin.app.vault.adapter.stat(file);
+
+			if (
+				this.isFileExcluded(
+					file,
+					excludePatterns
+						.split('\n')
+						.flatMap((pattern) => pattern.trim().split(','))
+						.flatMap((pattern) => pattern.trim()),
+				)
+			) {
+				continue;
+			}
+
+			arr.push({
+				path: file,
+				size: entry?.size ?? 0,
+				createdAt: new Date(entry?.ctime ?? 0).getTime(),
+				updatedAt: new Date(entry?.mtime ?? 0).getTime(),
+				deletedAt: new Date(entry?.mtime ?? 0).getTime(),
+				deleted: false,
+			});
+		}
+
+		for (const childFolder of files.folders) {
+			arr.push(...(await this.walkInternalFiles(childFolder)));
+		}
+
+		return arr;
+	}
+
 	private async walk(): Promise<FileMetadata[]> {
 		const files: FileMetadata[] = [];
 		const localTAbstractFiles = this.vault.getAllLoadedFiles();
@@ -111,20 +156,12 @@ export class LocalFileSystem extends FileSystem {
 					this.isFileExcluded(
 						path,
 						excludePatterns
-							.split(',')
+							.split('\n')
 							.flatMap((pattern) => pattern.trim().split(','))
 							.flatMap((pattern) => pattern.trim()),
 					)
 				) {
 					continue;
-				}
-
-				let lastModified = entry.stat.mtime;
-				if (lastModified <= 0) {
-					lastModified = entry.stat.ctime;
-				}
-				if (lastModified <= 0) {
-					lastModified = Date.now();
 				}
 
 				files.push({

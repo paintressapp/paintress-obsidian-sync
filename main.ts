@@ -23,6 +23,7 @@ export default class PaintressSyncPlugin extends Plugin {
 		this.settingsController = new SettingsController(this);
 		await this.settingsController.loadSettings();
 
+		this.fileHistory = new LocalFileHistory(this);
 		this.initializeSyncController();
 
 		this.registerEvent('');
@@ -59,7 +60,6 @@ export default class PaintressSyncPlugin extends Plugin {
 
 		this.clearStatusBarItem();
 
-		this.fileHistory = new LocalFileHistory(this);
 
 		// Obsidian file move or file deleted event
 		this.app.vault.on('rename', (file, oldPath) => {
@@ -109,7 +109,7 @@ export default class PaintressSyncPlugin extends Plugin {
 		const localFs = new LocalFileSystem(this, this.settingsController, this.fileHistory!);
 		const remoteFs = new RemoteFileSystem(repo, this.settingsController);
 		const crypto = new Crypto(this.settingsController);
-		const conflictResolver = new ConflictResolver();
+		const conflictResolver = new ConflictResolver(this.settingsController);
 
 		this.syncController = new SyncController(localFs, remoteFs, this.settingsController, crypto, conflictResolver);
 	}

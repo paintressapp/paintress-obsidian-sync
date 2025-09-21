@@ -1,6 +1,6 @@
 import { Plugin } from 'obsidian';
 
-export type ConflictResolutionStrategy = 'ignore' | 'latest' | 'oldest' | 'always-pull' | 'always-push';
+export type ConflictResolutionStrategy = 'ignore' | 'latest' | 'oldest' | 'always-pull' | 'always-push' | 'resolve';
 
 export type PaintressSyncSettings = {
 	enabled: boolean;
@@ -23,6 +23,8 @@ export type PaintressSyncSettings = {
 	terms_accepted: boolean;
 
 	last_synced_at: number;
+
+	sync_internal_files: boolean;
 };
 
 export const DEFAULT_SETTINGS: PaintressSyncSettings = {
@@ -38,13 +40,18 @@ export const DEFAULT_SETTINGS: PaintressSyncSettings = {
 	auto_resolve_conflict: true,
 	fallback_conflict_resolution_strategy: 'latest',
 
-	resolution_strategies: [],
+	resolution_strategies: [
+		{ glob: '**/.paintress', strategy: 'ignore' },
+		{ glob: '**/.obsidian', strategy: 'latest' },
+	],
 
-	exclude_globs: './paintress/file-history.db',
+	exclude_globs: '**/.paintress, **/paintress-obsidian-plugin',
 
 	terms_accepted: false,
 
 	last_synced_at: 0,
+
+	sync_internal_files: false,
 };
 
 export class SettingsController {
