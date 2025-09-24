@@ -37,7 +37,7 @@ const context = await esbuild.context({
 	logLevel: 'info',
 	sourcemap: prod ? false : 'inline',
 	treeShaking: true,
-	outfile: 'main.js',
+	outfile: prod ? 'main.js' : '/Users/reezpatel/Downloads/temp/.obsidian/plugins/paintress-sync/main.js',
 	minify: prod,
 });
 

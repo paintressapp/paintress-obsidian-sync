@@ -244,13 +244,13 @@ export class SyncController {
 			}
 		}
 
-		const hostModifiedFiles = hostFiles.filter((file) => !file.deleted && file.updatedAt > this.last_synced_at);
+		const hostModifiedFiles = hostFiles;
 
 		for (const hostModifiedFile of hostModifiedFiles) {
 			const remoteFile = this.getFile(remoteFiles, hostModifiedFile.path);
 
 			// push -> no remote, or remote is last updated before sync
-			if (!remoteFile || remoteFile.updatedAt < this.last_synced_at) {
+			if (!remoteFile || remoteFile.updatedAt < hostModifiedFile.updatedAt) {
 				console.log('[SyncController] Push: ', { hostModifiedFile, remoteFile, lastSyncedAt: this.last_synced_at });
 				objMap.set(hostModifiedFile.path, this.createAction(hostModifiedFile, remoteFile || null, 'push'));
 			} else if (remoteFile.updatedAt > this.last_synced_at) {

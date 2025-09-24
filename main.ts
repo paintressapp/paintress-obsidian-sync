@@ -26,18 +26,17 @@ export default class PaintressSyncPlugin extends Plugin {
 		this.fileHistory = new LocalFileHistory(this);
 		this.initializeSyncController();
 
-		this.registerEvent('');
+		// this.registerEvent('');
 
 		this.app.workspace.onLayoutReady(() => {
 			const intervalID = window.setInterval(() => {
 				if (this.settingsController.settings.sync_type === 'auto') {
 					this.runSync();
 				}
-			}, 3000);
+			}, this.settingsController.settings.sync_interval);
 
 			this.registerInterval(intervalID);
 		});
-
 		this.addSettingTab(new SettingTab(this.app, this, this.settingsController));
 
 		this.addCommand({
@@ -60,7 +59,6 @@ export default class PaintressSyncPlugin extends Plugin {
 
 		this.clearStatusBarItem();
 
-
 		// Obsidian file move or file deleted event
 		this.app.vault.on('rename', (file, oldPath) => {
 			this.fileHistory?.markFileAsDeleted(oldPath, 0, 0);
@@ -70,6 +68,8 @@ export default class PaintressSyncPlugin extends Plugin {
 			this.fileHistory?.markFileAsDeleted(file.path, 0, 0);
 		});
 	}
+
+	async onunload() {}
 
 	private clearStatusBarItem() {
 		this.statusBarItem!.empty();
