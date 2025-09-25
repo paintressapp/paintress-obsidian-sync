@@ -201,6 +201,14 @@ export class SyncController {
 	private async createSyncAction(hostFiles: FileMetadata[], remoteFiles: FileMetadata[]): Promise<SyncAction[]> {
 		const objMap = new Map<string, SyncAction>();
 
+		const set = (key: string, value: SyncAction) => {
+			if (objMap.has(key)) {
+				return;
+			}
+
+			objMap.set(key, value);
+		};
+
 		// Apply remote deletions
 		const remoteDeletedFiles = remoteFiles.filter((file) => file.deleted);
 
@@ -209,11 +217,11 @@ export class SyncController {
 
 			if (hostFile) {
 				if (hostFile.deleted) {
-					objMap.set(hostFile.path, this.createAction(hostFile, remoteDeletedFile, 'prune'));
+					set(hostFile.path, this.createAction(hostFile, remoteDeletedFile, 'prune'));
 				} else if (hostFile.createdAt < remoteDeletedFile.deletedAt) {
-					objMap.set(hostFile.path, this.createAction(hostFile, remoteDeletedFile, 'remove'));
+					set(hostFile.path, this.createAction(hostFile, remoteDeletedFile, 'remove'));
 				} else {
-					objMap.set(hostFile.path, this.createAction(hostFile, remoteDeletedFile, 'push'));
+					set(hostFile.path, this.createAction(hostFile, remoteDeletedFile, 'push'));
 				}
 			} else {
 				// DO-NOT prune remote, it will affect other hosts
@@ -234,17 +242,17 @@ export class SyncController {
 					// await this.remote.prune(remoteFile.path);
 				} else if (remoteFile.createdAt < hostDeletedFile.deletedAt) {
 					//04
-					objMap.set(remoteFile.path, this.createAction(hostDeletedFile, remoteFile, 'remove'));
+					set(remoteFile.path, this.createAction(hostDeletedFile, remoteFile, 'remove'));
 				} else {
 					//05, 03
-					objMap.set(hostDeletedFile.path, this.createAction(hostDeletedFile, remoteFile, 'pull'));
+					set(hostDeletedFile.path, this.createAction(hostDeletedFile, remoteFile, 'pull'));
 				}
 			} else {
-				objMap.set(hostDeletedFile.path, this.createAction(hostDeletedFile, null, 'prune'));
+				set(hostDeletedFile.path, this.createAction(hostDeletedFile, null, 'prune'));
 			}
 		}
 
-		const hostModifiedFiles = hostFiles;
+		const hostModifiedFiles = hostFiles.filter((file) => !file.deleted);
 
 		for (const hostModifiedFile of hostModifiedFiles) {
 			const remoteFile = this.getFile(remoteFiles, hostModifiedFile.path);
@@ -252,26 +260,26 @@ export class SyncController {
 			// push -> no remote, or remote is last updated before sync
 			if (!remoteFile || remoteFile.updatedAt < hostModifiedFile.updatedAt) {
 				console.log('[SyncController] Push: ', { hostModifiedFile, remoteFile, lastSyncedAt: this.last_synced_at });
-				objMap.set(hostModifiedFile.path, this.createAction(hostModifiedFile, remoteFile || null, 'push'));
+				set(hostModifiedFile.path, this.createAction(hostModifiedFile, remoteFile || null, 'push'));
 			} else if (remoteFile.updatedAt > this.last_synced_at) {
 				console.log('[SyncController] Conflict: ', { hostModifiedFile, remoteFile, lastSyncedAt: this.last_synced_at });
-				objMap.set(hostModifiedFile.path, this.createAction(hostModifiedFile, remoteFile, 'conflict'));
+				set(hostModifiedFile.path, this.createAction(hostModifiedFile, remoteFile, 'conflict'));
 			}
 		}
 
-		const remoteModifiedFiles = remoteFiles.filter((file) => !file.deleted && file.updatedAt > this.last_synced_at);
+		const remoteModifiedFiles = remoteFiles.filter((file) => !file.deleted);
 
 		for (const remoteModifiedFile of remoteModifiedFiles) {
 			const hostFile = this.getFile(hostFiles, remoteModifiedFile.path);
 
-			if (!hostFile || hostFile.updatedAt < this.last_synced_at) {
+			if (!hostFile || hostFile.updatedAt < remoteModifiedFile.updatedAt) {
 				// pull -> no host, or host is last updated before sync
 				console.log('[SyncController] Pull: ', { hostFile, remoteModifiedFile, lastSyncedAt: this.last_synced_at });
-				objMap.set(remoteModifiedFile.path, this.createAction(hostFile || null, remoteModifiedFile, 'pull'));
+				set(remoteModifiedFile.path, this.createAction(hostFile || null, remoteModifiedFile, 'pull'));
 			} else if (hostFile.updatedAt > this.last_synced_at) {
 				// conflict -> host is last updated after sync
 				console.log('[SyncController] Conflict: ', { hostFile, remoteModifiedFile, lastSyncedAt: this.last_synced_at });
-				objMap.set(remoteModifiedFile.path, this.createAction(hostFile, remoteModifiedFile, 'conflict'));
+				set(remoteModifiedFile.path, this.createAction(hostFile, remoteModifiedFile, 'conflict'));
 			}
 		}
 
