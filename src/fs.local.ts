@@ -68,18 +68,28 @@ export class LocalFileSystem extends FileSystem {
 	}
 
 	async remove(path: string, previousUpdatedAt: number): Promise<void> {
-		const { ctime, mtime } = await this.getFileStats(path);
+		try {
+			const { ctime, mtime } = await this.getFileStats(path);
 
-		if (mtime !== 0 && mtime !== previousUpdatedAt) {
-			throw new Error('File has been modified since last sync');
-		}
-
-		if (this.deleteToWhere === 'obsidian') {
-			await this.vault.adapter.trashLocal(path);
-		} else {
-			if (!(await this.vault.adapter.trashSystem(path))) {
-				await this.vault.adapter.trashLocal(path);
+			if (mtime !== 0 && mtime !== previousUpdatedAt) {
+				throw new Error('File has been modified since last sync');
 			}
+
+			const stats = await this.vault.adapter.stat(path);
+
+			if (!stats) {
+				return;
+			}
+
+			if (this.deleteToWhere === 'obsidian') {
+				await this.vault.adapter.trashLocal(path);
+			} else {
+				if (!(await this.vault.adapter.trashSystem(path))) {
+					await this.vault.adapter.trashLocal(path);
+				}
+			}
+		} catch (error) {
+			console.log('Failed to remove file:', error);
 		}
 	}
 

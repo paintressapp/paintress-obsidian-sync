@@ -53,6 +53,7 @@ export class SyncController {
 		console.log('[SyncController] Created actions: ', actions);
 
 		for (const action of actions) {
+			console.log('[SyncController] Applying action: ', action);
 			await this.applySyncAction(action, now);
 		}
 
